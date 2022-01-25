@@ -1,3 +1,9 @@
+# Ours
+dio/*
+!dio/src/main/webapp/index.html
+
+
+# Theirs
 # Logs
 logs
 *.log

@@ -1,0 +1,10 @@
+<script>
+let old_key = "ab"
+let re = new RegExp(`[ ]{1}${old_key}`, 'ig')
+let docString = " ab: \n - ab "
+
+let matches = docString.matchAll(re)
+for (let m of matches) {
+    console.log(m)
+}
+</script>

@@ -1,0 +1,36 @@
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: no-content;
+        }
+
+        .float-left {
+            float: left;
+        }
+
+        .float-right {
+            float: right;
+        }
+
+        #editor {
+            height: 100vh;
+            width: 25% !important;
+            max-width: 25% !important;
+            margin: 0;
+            padding: 0;
+        }
+
+        .cm-editor {
+            height: 100%;
+        }
+
+        .CodeMirror {
+            height: 100% !important;
+        }
+
+        #dio {
+            height: 100vh;
+            width: 75%;
+            margin: 0;
+            padding: 0;
+        }
