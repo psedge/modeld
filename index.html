@@ -4,15 +4,14 @@
     <meta charset="UTF-8">
     <title>modeld</title>
     <link rel="icon" href="static/modeld.png">
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.1/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.1/theme/darcula.min.css">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 </head>
 <body>
 
-<div id="editor" class="float-left"></div>
+<div id="editor" class="float-left">nodes:
+    backend:
+        type: app</div>
 <iframe frameborder="0" id="dio" class="float-right" src="http://localhost:8000/dio/src/main/webapp/index.html?test=1"></iframe>
 
 <script src="dist/app.bundle.js"></script>

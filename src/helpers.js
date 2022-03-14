@@ -25,6 +25,8 @@ export function formatConnections(key, cnxList) {
     }
 
     for (let target of cnxList) {
+        if (target === null) continue
+
         let targetKey = null
         let id, text, type = null
 

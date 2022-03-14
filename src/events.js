@@ -138,7 +138,7 @@ export function handleEvent(type, context) {
                 name: key,
                 id: cell.id,
                 type: cellType,
-                line: document.editor.viewState.state.doc.text.length,
+                line: code.getLines().length,
                 trust: null,
                 accepts: [],
                 connections: {}

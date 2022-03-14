@@ -1,9 +1,34 @@
 import 'js-yaml';
+import 'ace-builds/src/ace';
 import {editor} from './app'
 import * as consts from './consts'
+import * as syntax from "./syntax";
 
 function getIndentLevel(n) {
     return " ".repeat(n * 4)
+}
+
+export function getLines() {
+    return editor.getSession().getDocument().getAllLines()
+}
+
+/**
+ * Take an index from the start of the document, get the row and column of it
+ * @param index
+ */
+export function getPosFromIndex(index) {
+    let cursor = 0
+    let lines = getLines()
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i]
+        if (cursor + line.length < index) {
+            cursor += line.length + 1
+            continue
+        }
+        console.log("returning " + [i, index-cursor])
+        return [i, index-cursor]
+    }
 }
 
 /**
@@ -11,9 +36,36 @@ function getIndentLevel(n) {
  * @param changes
  */
 export function attemptEditChange(changes) {
+    if (!changes.hasOwnProperty('changes')) return
+
     editor.lockEvents = true
     try {
-        editor.dispatch(changes)
+        let change = changes.changes
+        let fromPos, toPos;
+        fromPos = getPosFromIndex(change.from)
+        toPos = getPosFromIndex(change.to)
+
+        document.editor.getSession().replace(new ace.Range(fromPos[0], fromPos[1], toPos[0], toPos[1]), change.insert);
+    } catch (e) {
+        console.log(e)
+    } finally {
+        editor.lockEvents = false
+    }
+}
+
+/**
+ * Attempt an insert at document end
+ * @param
+ */
+export function attemptInsert(text) {
+    editor.lockEvents = true
+    try {
+        document.editor.getSession().insert({
+           row: editor.getSession().getLength(),
+           column: 0
+        }, "\n" + text)
+    } catch (e) {
+        console.log(e)
     } finally {
         editor.lockEvents = false
     }
@@ -23,13 +75,22 @@ export function attemptEditChange(changes) {
  * Parse the YAML contained within a textArea t, replacing tabs with 4 spaces
  * It's fairly common half way through editing it won't be valid, wait until it is
  * @param t
- * @returns {*}
+ * @returns bool
  */
 export function parseTextAreaToYaml(t) {
     try {
-        return jsyaml.load(t.text.join("\n"));
+        let yamlObj = jsyaml.load(t.join("\n"));
+        syntax.validateYaml(t)
+        return yamlObj
     } catch (e) {
         consts.DEBUG === true ? console.log(e) : null
+        editor.getSession().setAnnotations([{
+            row: e.mark.line,
+            column: e.mark.column,
+            type: "error",
+            text: e.reason
+        }]);
+
         return false
     }
 }
@@ -72,32 +133,12 @@ export function cleanKeyLine(line) {
 }
 
 /**
- * Return the child with a class attribute of "cm-activeLine"
+ * Return the active line
  * @param v
  * @returns {number}
  */
-export function activeLineFromViewUpdate(v) {
-    let count = 0
-    for (let lv of v.view.docView.children) {
-        if (lv.attrs === null || lv.attrs.length === 0) {
-            count += 1
-            continue
-        }
-
-        if (!lv.attrs.hasOwnProperty("class")) {
-            count += 1
-            continue
-        }
-
-        const classes = lv.attrs['class'].split(" ")
-        for (let cl of classes) {
-            if (cl === "cm-activeLine") {
-                return count
-            }
-        }
-
-        count += 1
-    }
+export function activeLineFromEditor(v) {
+    return editor.getCursorPosition().row
 }
 
 /**
@@ -108,13 +149,10 @@ export function addNodeToCode(node) {
     try {
         let nodeYaml = {
             type: node.type,
-            // connections: [' '],
         }
         let newNodeBlock = "\n" + getIndentLevel(1)
         newNodeBlock += (node.name + ":\n" + jsyaml.dump(nodeYaml)).replaceAll("\n", "\n" + getIndentLevel(2))
-        let documentEnd = document.editor.viewState.state.doc.length
-
-        attemptEditChange({changes: {from: documentEnd, to: documentEnd, insert: newNodeBlock}})
+        attemptInsert(newNodeBlock)
     } catch (e) {
         console.log("Node insertion: " + e)
     }
@@ -127,7 +165,7 @@ export function addNodeToCode(node) {
  */
 export function addConnectionToCodeRegex(key, cnx) {
     try {
-        let docString = editor.viewState.state.doc.text.join("\n")
+        let docString = getLines().join("\n")
         let yaml = jsyaml.load(docString)
 
         if (!yaml['nodes'][key].hasOwnProperty("connections")) {
@@ -136,7 +174,7 @@ export function addConnectionToCodeRegex(key, cnx) {
         yaml['nodes'][key]['connections'].push(cnx)
 
         let newNodeBlock = (key + ":\n" + jsyaml.dump(yaml['nodes'][key])).replaceAll("\n", "\n" + getIndentLevel(2))
-        let re = new RegExp(`${key}:[ \na-zA-Z:-]+?(?=$|\n[ ]{2,4}([a-zA-Z]+))`, 'ig')
+        let re = new RegExp(`${key}:[ \na-zA-Z0-9:-]+?(?=$|\n[ ]{2,4}([a-zA-Z]+))`, 'ig')
         let match = re.exec(docString);
 
         attemptEditChange({changes: {from: match['index'], to: match['index'] + match[0].length, insert: newNodeBlock}})
@@ -152,7 +190,7 @@ export function addConnectionToCodeRegex(key, cnx) {
  */
 export function addConnectionToCode(key, cnx) {
     try {
-        let docString = editor.viewState.state.doc.text.join("\n")
+        let docString = getLines().join("\n")
         let yaml = jsyaml.load(docString)
 
         if (!yaml['nodes'][key].hasOwnProperty("connections")) {
@@ -163,7 +201,7 @@ export function addConnectionToCode(key, cnx) {
         let newNodeBlock = (key + ":\n" + jsyaml.dump(yaml['nodes'][key]))
             .replaceAll("\n", "\n" + getIndentLevel(2))
             .replace(": null", "")
-        let re = new RegExp(`${key}:(["a-zA-Z:.'?,\\- \\n]+?)(?=($|\\n[ ]{4}[a-z]))`, 'ig')
+        let re = new RegExp(`${key}:(["a-zA-Z0-9:.'?,\\- \\n]+?)(?=($|\\n[ ]{4}[a-z]))`, 'ig')
         let match = re.exec(docString);
 
         attemptEditChange({changes: {from: match['index'], to: match['index'] + match[0].length, insert: newNodeBlock}})
@@ -179,17 +217,15 @@ export function addConnectionToCode(key, cnx) {
  */
 export function renameNodeInCode(old_key, new_key) {
     try {
-        let docString = editor.viewState.state.doc.text.join("\n")
-        let changes = []
         let re = new RegExp(`[ -][ ]${old_key}[ \n:]`, 'ig')
+        while (true) {
+            let docString = getLines().join("\n")
+            let matches = Array.from(docString.matchAll(re))
+            if (matches.length === 0) break
 
-        let matches = docString.matchAll(re)
-        for (let m of matches) {
-            let offset = m['index'] + 2
-            changes.push({from: offset, to: offset + old_key.length, insert: new_key})
+            let offset = matches[0]['index'] + 2
+            attemptEditChange({changes: {from: offset, to: offset + old_key.length, insert: new_key}})
         }
-
-        attemptEditChange({changes})
     } catch (e) {
         console.log("Node rename: " + e)
     }
@@ -201,11 +237,11 @@ export function renameNodeInCode(old_key, new_key) {
  */
 export function removeNodeFromCode(key) {
     try {
-        let docString = editor.viewState.state.doc.text.join("\n")
-        let re = new RegExp(`${key}:[ \na-zA-Z:\\-\x27]+?(?=$|\n+  ([a-zA-Z]+))`, 'ig')
+        let docString = getLines().join("\n")
+        let re = new RegExp(`${key}:[ \na-zA-Z0-9:\\-\x27]+?(?=$|\n+    ([a-zA-Z]+))`, 'ig')
         let match = re.exec(docString);
 
-        attemptEditChange({changes: {from: match['index'], to: match['index'] + match[0].length, insert: null}})
+        attemptEditChange({changes: {from: match['index'], to: match['index'] + match[0].length, insert: ""}})
     } catch (e) {
         console.log("Node removal: " + e)
     }
