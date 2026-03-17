@@ -3,6 +3,7 @@ import 'ace-builds/src/ace';
 import {editor} from './app'
 import * as consts from './consts'
 import * as syntax from "./syntax";
+import * as doc from './doc';
 
 function getIndentLevel(n) {
     return " ".repeat(n * 4)
@@ -101,8 +102,7 @@ export function parseTextAreaToYaml(t) {
  * @returns {boolean}
  */
 export function isValidType(type) {
-    const valid = ["app", "db", "database", "application", "actor"]
-    return valid.indexOf(type) >= 0;
+    return consts.VALID_TYPES.indexOf(type) >= 0;
 }
 
 /**
@@ -146,15 +146,14 @@ export function activeLineFromEditor(v) {
  * @param node
  */
 export function addNodeToCode(node) {
+    editor.lockEvents = true
     try {
-        let nodeYaml = {
-            type: node.type,
-        }
-        let newNodeBlock = "\n" + getIndentLevel(1)
-        newNodeBlock += (node.name + ":\n" + jsyaml.dump(nodeYaml)).replaceAll("\n", "\n" + getIndentLevel(2))
-        attemptInsert(newNodeBlock)
+        const newStr = doc.addNode(getLines().join('\n'), node)
+        editor.setValue(newStr, -1)
     } catch (e) {
         console.log("Node insertion: " + e)
+    } finally {
+        editor.lockEvents = false
     }
 }
 
@@ -173,7 +172,7 @@ export function addConnectionToCodeRegex(key, cnx) {
         }
         yaml['nodes'][key]['connections'].push(cnx)
 
-        let newNodeBlock = (key + ":\n" + jsyaml.dump(yaml['nodes'][key])).replaceAll("\n", "\n" + getIndentLevel(2))
+        let newNodeBlock = (key + ":\n" + jsyaml.dump(yaml['nodes'][key], { indent: 4 })).replaceAll("\n", "\n" + getIndentLevel(2)).trimEnd()
         let re = new RegExp(`${key}:[ \na-zA-Z0-9:-]+?(?=$|\n[ ]{2,4}([a-zA-Z]+))`, 'ig')
         let match = re.exec(docString);
 
@@ -188,25 +187,15 @@ export function addConnectionToCodeRegex(key, cnx) {
  * @param key
  * @param cnx
  */
-export function addConnectionToCode(key, cnx) {
+export function addConnectionToCode(key, cnx, from, to) {
+    editor.lockEvents = true
     try {
-        let docString = getLines().join("\n")
-        let yaml = jsyaml.load(docString)
-
-        if (!yaml['nodes'][key].hasOwnProperty("connections")) {
-            yaml['nodes'][key]['connections'] = []
-        }
-        yaml['nodes'][key]['connections'].push(cnx)
-
-        let newNodeBlock = (key + ":\n" + jsyaml.dump(yaml['nodes'][key]))
-            .replaceAll("\n", "\n" + getIndentLevel(2))
-            .replace(": null", "")
-        let re = new RegExp(`${key}:(["a-zA-Z0-9:.'?,\\- \\n]+?)(?=($|\\n[ ]{4}[a-z]))`, 'ig')
-        let match = re.exec(docString);
-
-        attemptEditChange({changes: {from: match['index'], to: match['index'] + match[0].length, insert: newNodeBlock}})
+        const newStr = doc.addConnection(getLines().join('\n'), key, cnx, from, to)
+        editor.setValue(newStr, -1)
     } catch (e) {
         console.log("Connection add: " + e)
+    } finally {
+        editor.lockEvents = false
     }
 }
 
@@ -234,15 +223,52 @@ export function renameNodeInCode(old_key, new_key) {
 /**
  *
  * @param key
+ * @param x
+ * @param y
+ * @param width
+ * @param height
+ */
+export function updateNodeGeometryInCode(key, x, y, width, height) {
+    editor.lockEvents = true
+    try {
+        const newStr = doc.updateGeometry(getLines().join('\n'), key, x, y, width, height)
+        editor.setValue(newStr, -1)
+    } catch (e) {
+        console.log("Geometry update: " + e)
+    } finally {
+        editor.lockEvents = false
+    }
+}
+
+/**
+ *
+ * @param key
+ * @param target
+ */
+export function removeConnectionFromCode(key, target) {
+    editor.lockEvents = true
+    try {
+        const newStr = doc.removeConnection(getLines().join('\n'), key, target)
+        editor.setValue(newStr, -1)
+    } catch (e) {
+        console.log("Connection removal: " + e)
+    } finally {
+        editor.lockEvents = false
+    }
+}
+
+/**
+ *
+ * @param key
  */
 export function removeNodeFromCode(key) {
+    editor.lockEvents = true
     try {
-        let docString = getLines().join("\n")
-        let re = new RegExp(`${key}:[ \na-zA-Z0-9:\\-\x27]+?(?=$|\n+    ([a-zA-Z]+))`, 'ig')
-        let match = re.exec(docString);
-
-        attemptEditChange({changes: {from: match['index'], to: match['index'] + match[0].length, insert: ""}})
+        const newStr = doc.removeNode(getLines().join('\n'), key)
+        editor.setValue(newStr, -1)
     } catch (e) {
         console.log("Node removal: " + e)
+    } finally {
+        editor.lockEvents = false
     }
 }

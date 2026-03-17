@@ -1,6 +1,6 @@
 # Ours
-dio/*
-!dio/src/main/webapp/index.html
+drawio/*
+!drawio/src/main/webapp/index.html
 
 
 # Theirs
@@ -108,3 +108,4 @@ dist
 
 # TernJS port file
 .tern-port
+drawio

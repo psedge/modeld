@@ -1,23 +1,53 @@
-        html, body {
+        html {
             margin: 0;
             padding: 0;
-            overflow: no-content;
         }
 
-        .float-left {
-            float: left;
-        }
-
-        .float-right {
-            float: right;
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
         }
 
         #editor {
             height: 100vh;
-            width: 25% !important;
-            max-width: 25% !important;
+            width: 25%;
+            min-width: 80px;
             margin: 0;
             padding: 0;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        #divider {
+            width: 5px;
+            height: 100vh;
+            flex-shrink: 0;
+            cursor: col-resize;
+            background: #2a2a2a;
+        }
+
+        #divider:hover, #divider.dragging {
+            background: #555;
+        }
+
+        #drawio {
+            height: 100vh;
+            flex: 1;
+            margin: 0;
+            padding: 0;
+            min-width: 0;
+        }
+
+        #drag-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            cursor: col-resize;
         }
 
         .cm-editor {
@@ -26,11 +56,4 @@
 
         .CodeMirror {
             height: 100% !important;
-        }
-
-        #dio {
-            height: 100vh;
-            width: 75%;
-            margin: 0;
-            padding: 0;
         }

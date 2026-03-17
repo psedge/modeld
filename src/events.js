@@ -1,4 +1,4 @@
-import {dioCtx} from "./app"
+import {drawioCtx} from "./app"
 import * as code from "./code";
 import * as helpers from "./helpers";
 import * as diagram from "./diagram";
@@ -9,7 +9,7 @@ import * as diagram from "./diagram";
  * @param context
  */
 export function callEvent(type, context) {
-    const ctx = dioCtx()
+    const ctx = drawioCtx()
 
     if (type === "nodeAdded") {
         let cellId = null
@@ -26,6 +26,9 @@ export function callEvent(type, context) {
             case "person":
                 cellId = ctx.helpers.insertActor(context.name)
                 break
+            case "generic":
+                cellId = ctx.helpers.insertShape(context.name, context.meta?.template ?? null)
+                break
         }
         document.nodes[context.name].id = cellId
     }
@@ -40,7 +43,7 @@ export function callEvent(type, context) {
 
     if (type === "edgeAdded") {
         document.nodes[context['sourceName']].connections[context['targetName']] = {
-            id: ctx.helpers.createEdge(context['source'], context['target'])
+            id: ctx.helpers.createEdge(context['source'], context['target'], context.from, context.to)
         }
     }
 
@@ -48,6 +51,14 @@ export function callEvent(type, context) {
         // let origCnx = document.nodes[context['sourceName']].connections[context['targetName']]
         // origCnx.id = ctx.helpers.createEdge(context['source'], context['target'])
         document.nodes[context['sourceName']].connections[context['targetName']] = context.cnx
+    }
+
+    if (type === "edgeRemoved") {
+        ctx.helpers.removeCell(context.id)
+    }
+
+    if (type === "geometryUpdated") {
+        ctx.helpers.setCellGeometry(context.id, context.x, context.y, context.width, context.height)
     }
 }
 
@@ -57,7 +68,7 @@ export function callEvent(type, context) {
  * @param context
  */
 export function handleEvent(type, context) {
-    let ctx = dioCtx()
+    let ctx = drawioCtx()
     if (ctx.locked === true) {
         return
     }
@@ -101,7 +112,16 @@ export function handleEvent(type, context) {
             document.nodes[source.value].connections[target.value] = {
                 id: edge.id
             }
-            code.addConnectionToCode(source.value, target.value)
+            let from = diagram.sideFromStyle(edge.style, 'exit')
+            let to   = diagram.sideFromStyle(edge.style, 'entry')
+            if (!from || !to) {
+                const inferred = diagram.inferSides(source, target)
+                if (inferred) {
+                    from = from || inferred.from
+                    to   = to   || inferred.to
+                }
+            }
+            code.addConnectionToCode(source.value, target.value, from, to)
         }
     }
 
@@ -114,13 +134,34 @@ export function handleEvent(type, context) {
             nodes[document.nodes[key].id] = document.nodes[key]
         }
 
-        for (let cell of cellsToRemove) {
-            // we found no node with that ID, delete away - no code change
-            if (nodes[cell.id] == null) continue
+        let edges = {}
+        for (let sourceName of Object.keys(document.nodes)) {
+            for (let targetName of Object.keys(document.nodes[sourceName].connections)) {
+                const id = document.nodes[sourceName].connections[targetName].id
+                if (id) edges[id] = { sourceName, targetName }
+            }
+        }
 
-            // remove the block and nodes entry
-            code.removeNodeFromCode(cell.value)
-            delete document.nodes[cell.value]
+        for (let cell of cellsToRemove) {
+            if (nodes[cell.id] != null) {
+                code.removeNodeFromCode(cell.value)
+                delete document.nodes[cell.value]
+            } else if (edges[cell.id] != null) {
+                const { sourceName, targetName } = edges[cell.id]
+                code.removeConnectionFromCode(sourceName, targetName)
+                delete document.nodes[sourceName].connections[targetName]
+            }
+        }
+    }
+
+    if (type === "cellsMoved" || type === "cellsResized") {
+        let cells = context.context.properties.cells
+        for (let cell of cells) {
+            if (cell.edge === true) continue
+            if (!document.nodes.hasOwnProperty(cell.value)) continue
+            let geo = cell.getGeometry()
+            if (!geo) continue
+            code.updateNodeGeometryInCode(cell.value, geo.x, geo.y, geo.width, geo.height)
         }
     }
 

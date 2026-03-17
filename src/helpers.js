@@ -18,7 +18,8 @@ export function lengthOfDict(dict) {
  * @param cnxList
  * @returns {{}}
  */
-export function formatConnections(key, cnxList) {
+export function formatConnections(key, cnxList, nodes = null) {
+    const _nodes = nodes ?? document.nodes
     let connections = {}
     if (cnxList === null) {
         return connections
@@ -41,13 +42,15 @@ export function formatConnections(key, cnxList) {
             type = target.hasOwnProperty('type') ? target.type : null
         }
 
-        if (document.nodes[key].connections.hasOwnProperty(targetKey) && document.nodes.hasOwnProperty(targetKey))
-            id = document.nodes[key].connections[targetKey].id
+        if (_nodes[key].connections.hasOwnProperty(targetKey) && _nodes.hasOwnProperty(targetKey))
+            id = _nodes[key].connections[targetKey].id
 
         connections[targetKey] = {
             id: id,
             text: text,
             type: type,
+            from: (typeof target === 'object' && target.from) ? target.from : null,
+            to:   (typeof target === 'object' && target.to)   ? target.to   : null,
         }
     }
 
@@ -59,18 +62,19 @@ export function formatConnections(key, cnxList) {
  * @param old_key
  * @param new_key
  */
-export function renameConnections(old_key, new_key) {
-    for (let key of Object.keys(document.nodes)) {
-        if (document.nodes[key].connections.length === 0) {
+export function renameConnections(old_key, new_key, nodes = null) {
+    const _nodes = nodes ?? document.nodes
+    for (let key of Object.keys(_nodes)) {
+        if (_nodes[key].connections.length === 0) {
             continue
         }
 
-        for (let cnx of Object.keys(document.nodes[key].connections)) {
+        for (let cnx of Object.keys(_nodes[key].connections)) {
             if (cnx !== old_key) {
                 continue
             }
-            document.nodes[key].connections[new_key] = document.nodes[key].connections[old_key]
-            delete document.nodes[key].connections[old_key]
+            _nodes[key].connections[new_key] = _nodes[key].connections[old_key]
+            delete _nodes[key].connections[old_key]
         }
     }
 }

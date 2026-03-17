@@ -1,56 +1,77 @@
 ![modeld](./static/modeld.png "modeld")
 
-"make every model collaborative, declarative, and programmable"
+> *Make every model collaborative, declarative, and programmable.*
 
-Models represent a single view of a system or application, taken at a point in time. They might miss out on details
-needed later, but were the correct level of abstraction for the author to communicate the ideas they wanted to at the time.
-They might not even represent the full truth now, or at some point in the future. The beauty of representing a model in 
-both a visual and written way is:
+**modeld** keeps a visual diagram and a code definition in sync — editing one updates the other in real time. The result is a system model that's as easy to sketch as a whiteboard diagram and as precise as a spec.
 
-1. It's fast to draw something or write code, not both. Translation between the two normally takes time, and 
-provides the most value. It's simple to write code and show someone detailed documentation, but it takes time for them to
-get a whole-system understanding of how components fit together. Similarly, it's easy to sketch something, but it requires 
-follow-up work to convert it to system requirements or interface definitions. 
+---
 
-2. It's difficult to update diagrams, as they typically don't benefit from much of the version control maturity that
-software does. Finding the reason for a change, or the author of an edit, is either impossible or requires meat-world
-activities. With a model simultaneously drawn and written, it's possible to have the level of insight we expect from
-documents and code.
+## Why
 
-3. It allows a set of people with different experience and backgrounds to collaborate on a design, both contributing
-the parts that bought them to the room. "Bridging the gap between business and engineering" sounds like a generic 
-platitude of most productivity tooling, but the consequences are real, expensive, and avoidable.
+Models represent a single view of a system at a point in time. They might not capture every detail, but they communicate the right level of abstraction for a given moment. The problem is that visual and written representations have always lived apart:
 
+- **Drawing is fast, but loses precision.** A sketch communicates structure instantly, but converting it to interface definitions or system requirements requires manual follow-up work.
+- **Code is precise, but loses the big picture.** Documentation tells you the details; it rarely gives a newcomer a whole-system view of how components fit together.
+- **Diagrams don't version well.** Finding who changed something, or why, is either impossible or requires reaching out to people directly.
 
-### Functionality
+modeld solves all three by treating the diagram and the code as two views of the same artifact. Changes propagate in both directions, and the underlying text is version-controlled like any other source file.
 
-#### Meta
+---
 
-[ ] Figure out a better way to manipulate code - awareness of structure, tokens, and subtrees
+## Features
 
-[ ] Define a protodefinition for types, with some level of IDE integration for suggestions
+- **Bidirectional sync** — add a node to the diagram and the code updates; edit the code and the diagram reflects it.
+- **Declarative model format** — models are defined in a plain-text YAML syntax that's readable, diffable, and scriptable.
+- **MCP integration** — an included Model Context Protocol server exposes the model to Claude Code for AI-assisted editing and querying.
 
-[ ] Redesign event handling either side: atomic edits, reproducible outcomes
-    - Move from `browser -> browser` comms to `browser -> server -> browser` with sockets/rtc
-    - Figure out how to queue, merge, and track edits across clients
+---
 
-[ ] Modify drawio shell
-    - Remove "unsaved progress"
-    - Hide the tab view, moving this to dual-control code and diagram
-    - Figure out layer integration with code
+## Getting Started
 
-#### Cells 
+**Clone draw.io** (required — the diagramming UI is served from a local draw.io checkout):
 
-[x] Add cell to graph -> create node
+```bash
+git clone https://github.com/jgraph/drawio.git drawio
+```
 
-[x] Delete cell in graph -> delete code node
+**Install dependencies:**
 
-[x] Delete node in code -> delete cell (Graph.prototype.removeCells)
+```bash
+npm install
+```
 
-#### Connections
+**Build:**
 
-[x] Add connection to code -> create edge
+```bash
+npm run build
+```
 
-[x] Add edge to graph -> create code
+**Run:**
 
-[ ] Delete connection in code -> delete edge
+```bash
+npm start
+```
+
+Then open [http://localhost:3001](http://localhost:3001) in your browser.
+
+**Run tests:**
+
+```bash
+npm test
+```
+
+---
+
+## MCP Setup
+
+Start the MCP server:
+
+```bash
+node mcp/server.js
+```
+
+Register it with Claude Code:
+
+```bash
+claude mcp add --transport http modeld http://localhost:3001/mcp
+```

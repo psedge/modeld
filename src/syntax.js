@@ -20,7 +20,7 @@ export function addAnnotation(row, text) {
  * @param yaml
  */
 export function validateYaml(yaml) {
-    const nodeKeys = ["type", "trust", "connections"]
+    const nodeKeys = ["type", "trust", "accepts", "connections", "meta"]
     try {
         let obj = jsyaml.load(yaml.join("\n"));
         for (let node of Object.keys(obj.nodes)) {

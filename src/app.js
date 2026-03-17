@@ -2,9 +2,35 @@ import * as code from './code'
 import * as consts from './consts'
 import * as events from './events'
 import * as helpers from './helpers'
+import * as sync from './sync'
 
 import 'ace-builds/src/ace';
 import 'ace-builds/src-min-noconflict/mode-yaml'
+
+// SSE connection to MCP server
+const evtSource = new EventSource('/events');
+evtSource.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'get_screenshot') {
+        const svg = drawioCtx().helpers.getSvg();
+        fetch('/screenshot-response', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: msg.id, svg })
+        });
+    } else if (msg.type === 'set_model') {
+        const ctx = drawioCtx();
+        ctx.helpers.clearGraph();
+        document.nodes = {};
+        editor.lockEvents = true;
+        editor.setValue(msg.yaml, -1);
+        editor.lockEvents = false;
+        let lines = code.getLines();
+        document.lines = lines;
+        let parsed = code.parseTextAreaToYaml(lines);
+        if (parsed) triggerChanges({ action: 'insert', yaml: parsed });
+    }
+};
 
 // PINNED
 export let editor = ace.edit("editor");
@@ -26,7 +52,15 @@ editor.getSession().on('change', (v) => {
 
         let lines = code.getLines()
         v.yaml = code.parseTextAreaToYaml(lines)
-        v.yaml ? triggerChanges(v) : null
+        if (v.yaml) {
+            triggerChanges(v)
+            editor.focus()
+            fetch('/model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ yaml: code.getLines().join('\n') })
+            })
+        }
 
         document.lines = lines
     }
@@ -38,151 +72,98 @@ document.editor = editor
 document.nodes = {}
 document.lines = []
 window.onload = function () {
-    const ctx = dioCtx()
-    ctx.helpers.registerEventHandler(events.handleEvent)
+    // eventHandler must be on window before the iframe calls registerEventHandler
 }
 window.eventHandler = events.handleEvent
-export let dioCtx = () => {return document.getElementById("dio").contentWindow.document}
+window.onDrawioReady = function () {
+    const ctx = drawioCtx()
+    ctx.helpers.registerEventHandler(events.handleEvent)
+    ctx.helpers.clearGraph()
+    document.nodes = {}
+
+    let lines = code.getLines()
+    document.lines = lines
+    let yaml = code.parseTextAreaToYaml(lines)
+    if (yaml) triggerChanges({ action: 'insert', yaml })
+}
+export let drawioCtx = () => {return document.getElementById("drawio").contentWindow.document}
 
 /**
  * Analyse diff between parsed YAML and global state
  * @param v
  */
 function triggerChanges(v) {
-    if (v.yaml.hasOwnProperty('nodes') === false) {
-        return
+    if (!v.yaml.hasOwnProperty('nodes')) return
+
+    const newNodes = v.yaml.nodes || {}
+
+    // Rename detection: line-based, editor-specific — stays here
+    if (Object.keys(newNodes).length > 0) {
+        let activeLine = code.activeLineFromEditor(v)
+        try {
+            let old_key = code.cleanKeyLine(document.lines[activeLine])
+            let new_key = code.cleanKeyLine(code.getLines()[activeLine])
+            if (new_key !== "" && document.nodes.hasOwnProperty(old_key)) {
+                document.nodes[new_key] = document.nodes[old_key]
+                document.nodes[new_key].name = new_key
+                helpers.renameConnections(old_key, new_key)
+                delete document.nodes[old_key]
+                code.renameNodeInCode(old_key, new_key)
+                events.callEvent("nodeRenamed", document.nodes[new_key])
+                return
+            }
+        } catch (e) {}
     }
 
-    // handle the last remaining node deleted
-    if (v.yaml['nodes'] === null || Object.keys(v.yaml['nodes']).length === 0) {
-        handleNodesDeleted(v)
-        return
+    for (const evt of sync.diffNodes(newNodes, document.nodes, v.action)) {
+        applyEvent(evt)
     }
 
-    // handle nodes renamed safely (finding an active line greater than editor legnth throws)
-    let activeLine = code.activeLineFromEditor(v)
-    try {
-        let old_key = code.cleanKeyLine(document.lines[activeLine])
-        let new_key = code.cleanKeyLine(code.getLines()[activeLine])
-        if (new_key !== "" && document.nodes.hasOwnProperty(old_key)) {
-            document.nodes[new_key] = document.nodes[old_key]
-            document.nodes[new_key].name = new_key
-            helpers.renameConnections(old_key, new_key)
-            delete document.nodes[old_key];
-            code.renameNodeInCode(old_key, new_key)
-            events.callEvent("nodeRenamed", document.nodes[new_key])
-            return
-        }
-    } catch (e) {}
-
-    // handle all other nodes deleted
-    handleNodesDeleted(v)
-
-    // need to loop to create all nodes before trying to create cnxs
-    for (let key of Object.keys(v.yaml['nodes'])) {
-        handleNodeAddition(v, key)
-    }
-
-    for (let key of Object.keys(v.yaml['nodes'])) {
-        handlePropertyUpdates(v, key)
-    }
-
-    consts.DEBUG === true ? console.log(document.nodes) : null
+    consts.DEBUG ? console.log(document.nodes) : null
 }
 
-/**
- * Only if the type is valid, trigger the change
- *
- * @param v
- * @param key
- */
-function handleNodeAddition(v, key) {
-    if (v.action !== "insert") return
+function applyEvent(evt) {
+    switch (evt.type) {
+        case 'nodeRemoved':
+            events.callEvent('nodeRemoved', evt.node)
+            delete document.nodes[evt.name]
+            break
 
-    const line = code.determineLineOfNode(key, code.getLines())
-    if (!document.nodes.hasOwnProperty(key) && v.yaml['nodes'][key] !== null && v.yaml['nodes'][key].hasOwnProperty('type')) {
-        if (!code.isValidType(v.yaml['nodes'][key]['type'])) {
-            return
+        case 'nodeAdded': {
+            document.nodes[evt.name] = {
+                name: evt.name,
+                type: evt.nodeType,
+                trust: evt.trust,
+                accepts: evt.accepts,
+                meta: evt.meta ?? null,
+                line: code.determineLineOfNode(evt.name, code.getLines()),
+                connections: {}
+            }
+            events.callEvent('nodeAdded', document.nodes[evt.name])
+            if (evt.meta && document.nodes[evt.name].id) {
+                const parseVec = str => {
+                    if (!str) return null
+                    const [x, y] = str.toString().split(',').map(Number)
+                    return isNaN(x) || isNaN(y) ? null : { x, y }
+                }
+                const pos = parseVec(evt.meta.pos), size = parseVec(evt.meta.size)
+                if (pos && size) events.callEvent('geometryUpdated', {
+                    id: document.nodes[evt.name].id,
+                    x: pos.x, y: pos.y, width: size.x, height: size.y
+                })
+            }
+            break
         }
 
-        // Trigger addition
-        document.nodes[key] = {
-            name: key,
-            type: v.yaml['nodes'][key]['type'],
-            trust: v.yaml['nodes'][key].hasOwnProperty('trust') ? v.yaml['nodes'][key]['trust'] : null,
-            line: line,
-            accepts: v.yaml['nodes'][key].hasOwnProperty('accepts') ? v.yaml['nodes'][key]['accepts'] : [],
-            connections: {}
-        }
+        case 'edgeRemoved':
+            events.callEvent('edgeRemoved', evt)
+            delete document.nodes[evt.sourceName].connections[evt.targetName]
+            break
 
-        consts.DEBUG === true ? console.log("Adding node: " + key) : null
-        events.callEvent("nodeAdded", document.nodes[key])
-    }
-}
-
-/**
- * Handle an event where a property of a node has changed.
- * @param v
- * @param key
- */
-function handlePropertyUpdates(v, key) {
-    const line = code.determineLineOfNode(key, code.getLines())
-    if (!document.nodes.hasOwnProperty(key)) return
-
-    document.nodes[key].name = key
-    document.nodes[key].type = v.yaml['nodes'][key]['type']
-    document.nodes[key].trust =  v.yaml['nodes'][key].hasOwnProperty('trust') ? v.yaml['nodes'][key]['trust'] : null
-    document.nodes[key].line = line
-    document.nodes[key].accepts = v.yaml['nodes'][key].hasOwnProperty('accepts') ? v.yaml['nodes'][key]['accepts'] : []
-
-    // check through the yaml connections for any keys that don't exist on the node
-    let candidateCnxs = v.yaml['nodes'][key].hasOwnProperty('connections') ? helpers.formatConnections(key, v.yaml['nodes'][key]['connections']) : {}
-    for (let cnx of Object.keys(candidateCnxs)) {
-        if (!document.nodes[key].connections.hasOwnProperty(cnx) && document.nodes.hasOwnProperty(cnx)) {
-            // we haven't created an edge yet, do it now
-            events.callEvent("edgeAdded", {
-                sourceName: key,
-                source: document.nodes[key].id,
-                targetName: cnx,
-                target: document.nodes[cnx].id,
-            })
-            continue
-        }
-
-        if (document.nodes.hasOwnProperty(cnx)) {
-            // handle connection prop update
-            events.callEvent("edgeUpdated", {
-                sourceName: key,
-                targetName: cnx,
-                cnx: candidateCnxs[cnx]
-            })
-        }
-    }
-
-}
-
-/**
- *
- * @param v
- */
-function handleNodesDeleted(v) {
-    if (v.action !== "removal") return
-
-    //handle nodes deleted
-    let startYaml = document.nodes
-    let endYaml = code.parseTextAreaToYaml(code.getLines().join("\n"))
-    if (typeof (startYaml['nodes']) == "object" && (helpers.lengthOfDict(startYaml) > helpers.lengthOfDict(endYaml['nodes']))) {
-        // if we got an empty endYaml, remove all
-        let removedNodes = []
-        if (helpers.lengthOfDict(endYaml['nodes']) === 0) {
-            removedNodes = Object.keys(startYaml)
-        } else {
-            removedNodes = Object.keys(startYaml).filter(x => Object.keys(endYaml['nodes']).indexOf(x) === -1);
-        }
-
-        for (let removedNode of removedNodes) {
-            events.callEvent("nodeRemoved", document.nodes[removedNode])
-            delete document.nodes[removedNode]
-        }
+        case 'edgeAdded':
+        case 'edgeUpdated':
+        case 'geometryUpdated':
+            events.callEvent(evt.type, evt)
+            break
     }
 }

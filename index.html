@@ -6,14 +6,72 @@
     <link rel="icon" href="static/modeld.png">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <script src="/node_modules/ace-builds/src-min-noconflict/ace.js"></script>
+    <script src="/node_modules/ace-builds/src-min-noconflict/mode-yaml.js"></script>
+    <script src="/node_modules/ace-builds/src-min-noconflict/theme-monokai.js"></script>
 </head>
 <body>
 
-<div id="editor" class="float-left">nodes:
-    backend:
-        type: app</div>
-<iframe frameborder="0" id="dio" class="float-right" src="http://localhost:8000/dio/src/main/webapp/index.html?test=1"></iframe>
+<div id="drag-overlay"></div>
+<div id="editor"></div>
+<div id="divider"></div>
+<iframe frameborder="0" id="drawio" src="/drawio/src/main/webapp/index.html?test=1"></iframe>
 
 <script src="dist/app.bundle.js"></script>
+<script>
+    // Coordinate model.yaml fetch with draw.io ready so both are in place before initial sync.
+    // Whichever arrives second triggers the original onDrawioReady.
+    const _origOnDioReady = window.onDrawioReady;
+    let _modelYamlReady = false;
+    let _drawioReadyPending = false;
+
+    window.onDrawioReady = function () {
+        if (_modelYamlReady) {
+            _origOnDioReady();
+        } else {
+            _drawioReadyPending = true;
+        }
+    };
+
+    fetch('/model.yaml')
+        .then(r => r.text())
+        .then(yamlText => {
+            document.editor.setValue(yamlText, -1);
+            _modelYamlReady = true;
+            if (_drawioReadyPending) {
+                window.onDrawioReady = _origOnDioReady;
+                _origOnDioReady();
+            } else {
+                window.onDrawioReady = _origOnDioReady;
+            }
+        });
+</script>
+<script>
+    const divider = document.getElementById('divider')
+    const editorEl = document.getElementById('editor')
+    const overlay  = document.getElementById('drag-overlay')
+
+    divider.addEventListener('mousedown', function (e) {
+        divider.classList.add('dragging')
+        overlay.style.display = 'block'
+
+        function onMove(e) {
+            const pct = (e.clientX / window.innerWidth) * 100
+            editorEl.style.width = Math.min(80, Math.max(5, pct)) + '%'
+            document.editor.resize()
+        }
+
+        function onUp() {
+            divider.classList.remove('dragging')
+            overlay.style.display = 'none'
+            document.removeEventListener('mousemove', onMove)
+            document.removeEventListener('mouseup', onUp)
+        }
+
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+        e.preventDefault()
+    })
+</script>
 </body>
 </html>
