@@ -5,4 +5,4 @@ nodes:
 
 `
 
-export const VALID_TYPES = ['app', 'application', 'db', 'database', 'actor', 'person', 'generic']
+export const VALID_TYPES = ['app', 'application', 'db', 'database', 'actor', 'person', 'generic', 'boundary']

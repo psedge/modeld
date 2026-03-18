@@ -2,12 +2,16 @@
   "name": "modeld",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "mode": "development",
   "private": true,
   "scripts": {
     "build": "rollup -c",
-    "start": "node mcp/server.js",
-    "test": "vitest run"
+    "start": "pkill -f 'node mcp/server.js' 2>/dev/null; node mcp/server.js",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "demo": "node scripts/record-demo.js",
+    "demo:gif": "ffmpeg -i \"$(ls -t recordings/*.webm | head -1)\" -vf \"fps=20,scale=1400:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" demo.gif"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +26,7 @@
     "rollup": "^2.66.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@rollup/plugin-commonjs": "^29.0.2",
     "@types/ace": "0.0.48",
     "vitest": "^3.0.0",

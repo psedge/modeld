@@ -29,8 +29,10 @@ export function diffNodes(newNodes, currentNodes, action = 'insert') {
                     type: 'nodeAdded',
                     name: key,
                     nodeType: n.type,
+                    label: n.label,
                     trust: n.trust ?? null,
                     accepts: n.accepts ?? [],
+                    contains: n.contains ?? [],
                     meta: n.meta ?? null,
                 })
             }
@@ -41,11 +43,23 @@ export function diffNodes(newNodes, currentNodes, action = 'insert') {
         if (!currentNodes.hasOwnProperty(key)) continue
         const n = newNodes[key]
 
+        const newLabel = 'label' in n ? (n.label ?? null) : undefined
+        const oldLabel = 'label' in currentNodes[key] ? (currentNodes[key].label ?? null) : undefined
+        if (newLabel !== undefined && newLabel !== oldLabel) {
+            events.push({ type: 'labelUpdated', name: key, label: newLabel })
+        }
+
         if (n?.meta && currentNodes[key].id) {
             const pos = parseVec(n.meta.pos)
             const size = parseVec(n.meta.size)
             if (pos && size) {
                 events.push({ type: 'geometryUpdated', id: currentNodes[key].id, x: pos.x, y: pos.y, width: size.x, height: size.y })
+            }
+            if (n.meta.style) {
+                events.push({ type: 'styleUpdated', id: currentNodes[key].id, style: n.meta.style })
+            }
+            if (n.meta.rotation !== undefined) {
+                events.push({ type: 'rotationUpdated', id: currentNodes[key].id, rotation: n.meta.rotation })
             }
         }
 
@@ -53,9 +67,13 @@ export function diffNodes(newNodes, currentNodes, action = 'insert') {
             ? formatConnections(key, n.connections, currentNodes)
             : {}
         for (const target of Object.keys(candidates)) {
-            if (!currentNodes[key].connections.hasOwnProperty(target) && currentNodes.hasOwnProperty(target)) {
-                events.push({ type: 'edgeAdded', sourceName: key, source: currentNodes[key].id, targetName: target, target: currentNodes[target].id, from: candidates[target].from, to: candidates[target].to })
-            } else if (currentNodes.hasOwnProperty(target)) {
+            const isPos = target.startsWith('pos:')
+            const knownTarget = isPos || currentNodes.hasOwnProperty(target)
+            const targetId = isPos ? null : currentNodes[target]?.id
+            const targetPos = isPos ? parsePosKey(target) : null
+            if (!currentNodes[key].connections.hasOwnProperty(target) && knownTarget) {
+                events.push({ type: 'edgeAdded', sourceName: key, source: currentNodes[key].id, targetName: target, target: targetId, targetPos, from: candidates[target].from, to: candidates[target].to, text: candidates[target].text ?? null })
+            } else if (!isPos && currentNodes.hasOwnProperty(target)) {
                 events.push({ type: 'edgeUpdated', sourceName: key, targetName: target, cnx: candidates[target] })
             }
         }
@@ -71,6 +89,11 @@ export function diffNodes(newNodes, currentNodes, action = 'insert') {
     }
 
     return events
+}
+
+function parsePosKey(posKey) {
+    const [x, y] = posKey.slice(4).split(',').map(Number)
+    return isNaN(x) || isNaN(y) ? null : { x, y }
 }
 
 function parseVec(str) {

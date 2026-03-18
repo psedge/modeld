@@ -12,13 +12,74 @@
             display: flex;
         }
 
-        #editor {
+        #editor-pane {
             height: 100vh;
             width: 25%;
             min-width: 80px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #editor-topbar {
+            height: 50px;
+            flex-shrink: 0;
+            background: #1a1a1a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 8px;
+            gap: 8px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        #save-status {
+            color: #888;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #save-status.saving {
+            color: #f0a500;
+        }
+
+        #save-status.saved {
+            color: #6a9f6a;
+        }
+
+        #editor-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        #editor-actions button {
+            background: #2a2a2a;
+            color: #aaa;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-family: monospace;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin: 2px;
+        }
+
+        #editor-actions button:hover {
+            background: #383838;
+            color: #ddd;
+        }
+
+        #editor {
+            flex: 1;
             margin: 0;
             padding: 0;
-            flex-shrink: 0;
             overflow: hidden;
         }
 

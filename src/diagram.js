@@ -7,6 +7,7 @@ export function determineCellTypeFromStyling(style) {
     if (style.indexOf("shape=umlActor") !== -1) return 'actor'
     if (style.indexOf("shape=actor") !== -1) return 'actor'
     if (style.indexOf("mxgraph.basic.smiley") !== -1) return 'actor'
+    if (style.indexOf("rounded=1") !== -1 && style.indexOf("dashed=1") !== -1) return 'boundary'
     if (style.indexOf("rounded=1") !== -1) return 'db'
     if (style.indexOf("cylinder") !== -1) return 'db'
     if (style.indexOf("database") !== -1) return 'db'
@@ -15,8 +16,25 @@ export function determineCellTypeFromStyling(style) {
     if (style.indexOf("aws4.rds") !== -1) return 'db'
     if (style.indexOf("aws3d.application_server") !== -1) return 'app'
     if (style.indexOf("aws4.ec2") !== -1) return 'app'
+    if (style.indexOf("rounded=0") !== -1) return 'app'
 
     return 'generic'
+}
+
+/**
+ * Compute enclosing geometry for a boundary given an array of contained geometries.
+ * Returns null if geos is empty.
+ * @param {{ x: number, y: number, width: number, height: number }[]} geos
+ * @param {number} padding
+ * @returns {{ x: number, y: number, width: number, height: number } | null}
+ */
+export function computeBoundaryGeometry(geos, padding = 20) {
+    if (!geos || geos.length === 0) return null
+    const minX = Math.min(...geos.map(g => g.x)) - padding
+    const minY = Math.min(...geos.map(g => g.y)) - padding
+    const maxX = Math.max(...geos.map(g => g.x + g.width)) + padding
+    const maxY = Math.max(...geos.map(g => g.y + g.height)) + padding
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
 /**

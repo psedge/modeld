@@ -20,13 +20,18 @@ export function addAnnotation(row, text) {
  * @param yaml
  */
 export function validateYaml(yaml) {
-    const nodeKeys = ["type", "trust", "accepts", "connections", "meta"]
+    const nodeKeys = ["type", "label", "trust", "accepts", "connections", "meta", "contains"]
     try {
         let obj = jsyaml.load(yaml.join("\n"));
+        if (!obj?.nodes || typeof obj.nodes !== 'object') return
         for (let node of Object.keys(obj.nodes)) {
+            if (!obj.nodes[node] || typeof obj.nodes[node] !== 'object') continue
             for (let key of Object.keys(obj.nodes[node])) {
                 if (nodeKeys.indexOf(key) < 0) {
                     addAnnotation(1, `${key} isn't valid here. See \`node\``)
+                }
+                if (key === 'contains' && obj.nodes[node].type !== 'boundary') {
+                    addAnnotation(1, `contains is only valid on boundary nodes`)
                 }
             }
         }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { determineCellTypeFromStyling, sideFromStyle, inferSides } from '../src/diagram'
+import { determineCellTypeFromStyling, sideFromStyle, inferSides, computeBoundaryGeometry } from '../src/diagram'
 
 describe('determineCellTypeFromStyling', () => {
     it('returns actor for umlActor shape', () => {
@@ -32,6 +32,14 @@ describe('determineCellTypeFromStyling', () => {
 
     it('returns app for aws4.ec2', () => {
         expect(determineCellTypeFromStyling('shape=mxgraph.aws4.ec2;')).toBe('app')
+    })
+
+    it('returns boundary for dashed rounded rectangle', () => {
+        expect(determineCellTypeFromStyling('rounded=1;whiteSpace=wrap;html=1;fillColor=none;dashed=1;strokeColor=#666666;verticalAlign=top;')).toBe('boundary')
+    })
+
+    it('returns db (not boundary) for rounded rectangle without dashed', () => {
+        expect(determineCellTypeFromStyling('rounded=1;whiteSpace=wrap;html=1;')).toBe('db')
     })
 })
 
@@ -96,5 +104,35 @@ describe('inferSides', () => {
         expect(inferSides(null, makeCell(0, 0, 100, 50))).toBeNull()
         expect(inferSides(makeCell(0, 0, 100, 50), null)).toBeNull()
         expect(inferSides({ geometry: null }, makeCell(0, 0, 100, 50))).toBeNull()
+    })
+})
+
+describe('computeBoundaryGeometry', () => {
+    it('empty array → null', () => {
+        expect(computeBoundaryGeometry([])).toBeNull()
+        expect(computeBoundaryGeometry(null)).toBeNull()
+    })
+
+    it('single node → padded bounding box', () => {
+        const result = computeBoundaryGeometry([{ x: 100, y: 50, width: 120, height: 60 }], 20)
+        expect(result).toEqual({ x: 80, y: 30, width: 160, height: 100 })
+    })
+
+    it('two nodes side by side → spans both', () => {
+        const geos = [
+            { x: 100, y: 100, width: 120, height: 60 },
+            { x: 300, y: 100, width: 120, height: 60 },
+        ]
+        const result = computeBoundaryGeometry(geos, 20)
+        expect(result.x).toBe(80)
+        expect(result.y).toBe(80)
+        expect(result.width).toBe(360)   // 80 to 440
+        expect(result.height).toBe(100)  // 80 to 180
+    })
+
+    it('default padding is 20', () => {
+        const withDefault = computeBoundaryGeometry([{ x: 100, y: 100, width: 100, height: 100 }])
+        const withExplicit = computeBoundaryGeometry([{ x: 100, y: 100, width: 100, height: 100 }], 20)
+        expect(withDefault).toEqual(withExplicit)
     })
 })

@@ -1,12 +1,28 @@
 import 'js-yaml';
 import 'ace-builds/src/ace';
-import {editor} from './app'
+import {editor, persistModel} from './app'
 import * as consts from './consts'
 import * as syntax from "./syntax";
 import * as doc from './doc';
 
 function getIndentLevel(n) {
     return " ".repeat(n * 4)
+}
+
+/**
+ * Replace editor content while keeping the cursor where the user left it.
+ * editor.setValue(str, -1) always jumps to the start; this prevents that.
+ * Schedules a debounced persist so draw.io-triggered changes are saved to
+ * disk and the URL hash even though the Ace editor isn't focused.
+ */
+let _persistTimer = null
+function setValueKeepCursor(newStr, pos = null) {
+    pos = pos ?? editor.getCursorPosition()
+    editor.setValue(newStr, -1)
+    editor.moveCursorToPosition(pos)
+    editor.clearSelection()
+    clearTimeout(_persistTimer)
+    _persistTimer = setTimeout(persistModel, 150)
 }
 
 export function getLines() {
@@ -149,7 +165,7 @@ export function addNodeToCode(node) {
     editor.lockEvents = true
     try {
         const newStr = doc.addNode(getLines().join('\n'), node)
-        editor.setValue(newStr, -1)
+        setValueKeepCursor(newStr)
     } catch (e) {
         console.log("Node insertion: " + e)
     } finally {
@@ -191,7 +207,7 @@ export function addConnectionToCode(key, cnx, from, to) {
     editor.lockEvents = true
     try {
         const newStr = doc.addConnection(getLines().join('\n'), key, cnx, from, to)
-        editor.setValue(newStr, -1)
+        setValueKeepCursor(newStr)
     } catch (e) {
         console.log("Connection add: " + e)
     } finally {
@@ -205,18 +221,24 @@ export function addConnectionToCode(key, cnx, from, to) {
  * @param new_key
  */
 export function renameNodeInCode(old_key, new_key) {
+    editor.lockEvents = true
     try {
-        let re = new RegExp(`[ -][ ]${old_key}[ \n:]`, 'ig')
-        while (true) {
-            let docString = getLines().join("\n")
-            let matches = Array.from(docString.matchAll(re))
-            if (matches.length === 0) break
-
-            let offset = matches[0]['index'] + 2
-            attemptEditChange({changes: {from: offset, to: offset + old_key.length, insert: new_key}})
+        const currentStr = getLines().join('\n')
+        const newStr = doc.renameNode(currentStr, old_key, new_key)
+        if (newStr !== currentStr) {
+            // Content changed (e.g. connection references updated) — replace and place
+            // cursor at end of the renamed key line (after the colon).
+            const newLines = newStr.split('\n')
+            const keyRow = determineLineOfNode(new_key, newLines)
+            const pos = keyRow !== null ? { row: keyRow, column: newLines[keyRow].length } : null
+            setValueKeepCursor(newStr, pos)
         }
+        // If content is unchanged, skip setValue — cursor stays naturally after
+        // the last typed character, ready for continued key editing.
     } catch (e) {
         console.log("Node rename: " + e)
+    } finally {
+        editor.lockEvents = false
     }
 }
 
@@ -232,7 +254,7 @@ export function updateNodeGeometryInCode(key, x, y, width, height) {
     editor.lockEvents = true
     try {
         const newStr = doc.updateGeometry(getLines().join('\n'), key, x, y, width, height)
-        editor.setValue(newStr, -1)
+        setValueKeepCursor(newStr)
     } catch (e) {
         console.log("Geometry update: " + e)
     } finally {
@@ -249,9 +271,51 @@ export function removeConnectionFromCode(key, target) {
     editor.lockEvents = true
     try {
         const newStr = doc.removeConnection(getLines().join('\n'), key, target)
-        editor.setValue(newStr, -1)
+        setValueKeepCursor(newStr)
     } catch (e) {
         console.log("Connection removal: " + e)
+    } finally {
+        editor.lockEvents = false
+    }
+}
+
+/**
+ *
+ * @param key
+ * @param target
+ * @param text
+ */
+export function updateNodeStyleInCode(key, style) {
+    editor.lockEvents = true
+    try {
+        const newStr = doc.updateNodeStyleAndRotation(getLines().join('\n'), key, style)
+        setValueKeepCursor(newStr)
+    } catch (e) {
+        console.log("Style update: " + e)
+    } finally {
+        editor.lockEvents = false
+    }
+}
+
+export function updateNodeLabelInCode(key, label) {
+    editor.lockEvents = true
+    try {
+        const newStr = doc.updateNodeLabel(getLines().join('\n'), key, label)
+        setValueKeepCursor(newStr)
+    } catch (e) {
+        console.log("Label update: " + e)
+    } finally {
+        editor.lockEvents = false
+    }
+}
+
+export function updateConnectionTextInCode(key, target, text) {
+    editor.lockEvents = true
+    try {
+        const newStr = doc.updateConnectionText(getLines().join('\n'), key, target, text)
+        setValueKeepCursor(newStr)
+    } catch (e) {
+        console.log("Connection text update: " + e)
     } finally {
         editor.lockEvents = false
     }
@@ -265,7 +329,7 @@ export function removeNodeFromCode(key) {
     editor.lockEvents = true
     try {
         const newStr = doc.removeNode(getLines().join('\n'), key)
-        editor.setValue(newStr, -1)
+        setValueKeepCursor(newStr)
     } catch (e) {
         console.log("Node removal: " + e)
     } finally {

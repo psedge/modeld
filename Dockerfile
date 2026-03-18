@@ -26,12 +26,14 @@ COPY --from=builder /app/dist ./dist
 
 # draw.io webapp only (the full repo is ~200MB; the webapp is ~30MB)
 COPY --from=drawio /drawio/src/main/webapp ./drawio/src/main/webapp
+# Overlay modeld's customized index.html (tracked in git, excluded from drawio clone)
+COPY drawio/src/main/webapp/index.html ./drawio/src/main/webapp/index.html
 
 # MCP server
 COPY mcp ./mcp
 
-# model.yaml is user data — mount a volume here in production
-VOLUME ["/app/model.yaml"]
+# model.yaml — default empty file; override in production with:
+#   -v /path/to/model.yaml:/app/model.yaml
 RUN echo "" > model.yaml
 
 # Run as non-root

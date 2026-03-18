@@ -7,14 +7,21 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="/node_modules/ace-builds/src-min-noconflict/ace.js"></script>
-    <script src="/node_modules/ace-builds/src-min-noconflict/mode-yaml.js"></script>
-    <script src="/node_modules/ace-builds/src-min-noconflict/theme-monokai.js"></script>
 </head>
 <body>
 
 <div id="drag-overlay"></div>
-<div id="editor"></div>
-<div id="divider"></div>
+<div id="editor-pane">
+    <div id="editor-topbar">
+        <span id="save-status">loading...</span>
+        <div id="editor-actions">
+            <button id="btn-reload"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>reload</button>
+            <button id="btn-new"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>new</button>
+        </div>
+    </div>
+    <div id="editor"></div>
+</div>
+<div id="divider" tabindex="-1"></div>
 <iframe frameborder="0" id="drawio" src="/drawio/src/main/webapp/index.html?test=1"></iframe>
 
 <script src="dist/app.bundle.js"></script>
@@ -33,22 +40,78 @@
         }
     };
 
-    fetch('/model.yaml')
-        .then(r => r.text())
-        .then(yamlText => {
-            document.editor.setValue(yamlText, -1);
-            _modelYamlReady = true;
-            if (_drawioReadyPending) {
-                window.onDrawioReady = _origOnDioReady;
-                _origOnDioReady();
-            } else {
-                window.onDrawioReady = _origOnDioReady;
+    function loadModel(yamlText) {
+        document.editor.setValue(yamlText, -1);
+        _modelYamlReady = true;
+        if (_drawioReadyPending) {
+            window.onDrawioReady = _origOnDioReady;
+            _origOnDioReady();
+        } else {
+            window.onDrawioReady = _origOnDioReady;
+        }
+        window.__onModelLoaded?.();
+    }
+
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+        try {
+            loadModel(decodeURIComponent(escape(atob(hash))));
+        } catch(e) {
+            fetch('/model.yaml').then(r => r.text()).then(loadModel);
+        }
+    } else {
+        fetch('/model.yaml').then(r => r.text()).then(loadModel);
+    }
+</script>
+<script>
+    // Session ID + save status
+    const SESSION_ID = Math.random().toString(36).slice(2, 8);
+    const saveStatus = document.getElementById('save-status');
+    let saveTimer = null;
+
+    function setSaving() {
+        saveStatus.textContent = 'saving to ' + SESSION_ID + '.yml';
+        saveStatus.className = 'saving';
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            saveStatus.textContent = 'saved to ' + SESSION_ID + '.yml';
+            saveStatus.className = 'saved';
+        }, 600);
+    }
+
+    window.__onModelLoaded = function() {
+        saveStatus.textContent = 'saved to ' + SESSION_ID + '.yml';
+        saveStatus.className = 'saved';
+    };
+
+    // Wait for editor to be ready then attach change listener
+    function watchEditor() {
+        if (!document.editor) { setTimeout(watchEditor, 100); return; }
+        document.editor.getSession().on('change', function() {
+            if (document.editor.lockEvents === false &&
+                document.activeElement.className === 'ace_text-input') {
+                setSaving();
             }
         });
+    }
+    watchEditor();
+
+    document.getElementById('btn-reload').addEventListener('click', function() {
+        window.reloadDiagram();
+    });
+
+    const BLANK_MODEL = 'nodes:\n  canvas:\n    type: boundary\n    meta:\n      pos: 0,0\n      size: 500,500\n';
+
+    document.getElementById('btn-new').addEventListener('click', function() {
+        window.reloadDiagram(BLANK_MODEL);
+        history.replaceState(null, '', window.location.pathname);
+        saveStatus.textContent = 'saved to ' + SESSION_ID + '.yml';
+        saveStatus.className = 'saved';
+    });
 </script>
 <script>
     const divider = document.getElementById('divider')
-    const editorEl = document.getElementById('editor')
+    const editorPane = document.getElementById('editor-pane')
     const overlay  = document.getElementById('drag-overlay')
 
     divider.addEventListener('mousedown', function (e) {
@@ -57,7 +120,7 @@
 
         function onMove(e) {
             const pct = (e.clientX / window.innerWidth) * 100
-            editorEl.style.width = Math.min(80, Math.max(5, pct)) + '%'
+            editorPane.style.width = Math.min(80, Math.max(5, pct)) + '%'
             document.editor.resize()
         }
 
