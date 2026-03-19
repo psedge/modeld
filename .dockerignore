@@ -1,4 +1,7 @@
 node_modules
 drawio
-!drawio/src/main/webapp/index.html
 dist
+recordings
+scripts
+demo.gif
+.github

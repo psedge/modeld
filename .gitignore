@@ -1,6 +1,5 @@
 # Ours
 drawio/*
-!drawio/src/main/webapp/index.html
 
 
 # Theirs
@@ -108,6 +107,5 @@ dist
 
 # TernJS port file
 .tern-port
-drawio
 test-results
 recordings
