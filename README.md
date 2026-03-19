@@ -116,22 +116,29 @@ npm test
 
 ## Docker
 
-**Build the image:**
+**Pull the pre-built image:**
 
 ```bash
-docker build -t modeld .
+docker pull ghcr.io/psedge/modeld:latest
 ```
 
 **Run with default (empty) model:**
 
 ```bash
-docker run -d -p 3001:3001 modeld
+docker run -d -p 3001:3001 ghcr.io/psedge/modeld:latest
 ```
 
 **Run with your own `model.yaml`** (bind-mount it so changes persist and the file is editable from the host):
 
 ```bash
-docker run -d -p 3001:3001 -v "$(pwd)/model.yaml:/app/model.yaml" modeld
+docker run -d -p 3001:3001 -v "$(pwd)/model.yaml:/app/model.yaml" ghcr.io/psedge/modeld:latest
+```
+
+**Or build the image locally:**
+
+```bash
+docker build -t modeld .
+docker run -d -p 3001:3001 modeld
 ```
 
 > Note: do not use `VOLUME` mounts for `model.yaml` — Docker volumes work as directories, not files, and will conflict with the file path.
